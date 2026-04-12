@@ -340,11 +340,17 @@ def fetch_nutrition_batch(items: list[dict]) -> dict:
 
 
 def build_station_hierarchy(food_items: list[dict]) -> list[dict]:
-    """Group flat food items into station -> meal_period -> items hierarchy."""
+    """Group flat food items into station -> meal_period -> items hierarchy, deduplicating by name."""
     stations = {}
+    seen = {}  # (station, meal_period, name) -> True
     for item in food_items:
         station_name = item.pop("station") or "General"
         meal_period = item.pop("meal_period")
+
+        dedup_key = (station_name, meal_period, item["name"])
+        if dedup_key in seen:
+            continue
+        seen[dedup_key] = True
 
         if station_name not in stations:
             stations[station_name] = {}
