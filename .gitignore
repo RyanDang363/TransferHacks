@@ -1,6 +1,7 @@
 .env
 .env.local
 .DS_Store
+.cursor/
 node_modules/
 __pycache__/
 venv/
