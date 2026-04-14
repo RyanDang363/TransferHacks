@@ -10,8 +10,8 @@ from supabase import create_client
 
 load_dotenv()
 
-SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
-SUPABASE_KEY = os.environ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]
+SUPABASE_URL = os.environ.get("EXPO_PUBLIC_SUPABASE_URL") or os.environ["NEXT_PUBLIC_SUPABASE_URL"]
+SUPABASE_KEY = os.environ.get("EXPO_PUBLIC_SUPABASE_ANON_KEY") or os.environ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 

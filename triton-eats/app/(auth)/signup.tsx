@@ -10,13 +10,14 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useAuth } from "@/context/AuthContext";
 import Colors from "@/constants/Colors";
 
 export default function SignupScreen() {
-  const { signUp } = useAuth();
+  const { signUp, signOut } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -38,6 +39,8 @@ export default function SignupScreen() {
     setLoading(true);
     try {
       await signUp(email.trim(), password);
+      await signOut();
+      router.replace("/(auth)/login");
       Alert.alert(
         "Check your email",
         "We sent you a confirmation link. Tap it then come back and sign in."

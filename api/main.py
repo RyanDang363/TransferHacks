@@ -20,10 +20,23 @@ from supabase import create_client
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
+
+def _env_first(*keys: str) -> str:
+    for k in keys:
+        v = os.environ.get(k)
+        if v:
+            return v
+    raise KeyError(keys[0])
+
+
+# Same names as triton-eats/.env so one copy-paste from Supabase (see EXPO_PUBLIC_* in Expo docs).
+SUPABASE_URL = _env_first("EXPO_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
 # Service role bypasses RLS so /recommend can read any user_profiles row by id.
 # Anon key cannot read user_profiles (RLS requires auth.uid() = id). Never expose service role in the Expo app.
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or _env_first(
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+)
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 GOOGLE_ROUTES_API_KEY = os.environ["GOOGLE_ROUTES_API_KEY"]
 
@@ -200,7 +213,7 @@ def get_dining_halls_with_coords() -> list[dict]:
               .select("id, name, latitude, longitude")
               .not_.is_("latitude", "null")
               .execute())
-    return result.data
+    return result.data or []
 
 
 def get_menu_items_for_halls(hall_ids: list[int]) -> list[dict]:
@@ -220,12 +233,12 @@ def get_menu_items_for_halls(hall_ids: list[int]) -> list[dict]:
               .in_("station_id", station_ids)
               .execute())
 
-    for item in result.data:
+    for item in result.data or []:
         station = station_map.get(item["station_id"], {})
         item["_station_name"] = station.get("name", "")
         item["_dining_hall_id"] = station.get("dining_hall_id")
 
-    return result.data
+    return result.data or []
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +320,7 @@ def rank_with_openai(items: list[dict], profile: dict, hall_walk_times: dict[int
     for item in items[:80]:
         hall_id = item.get("_dining_hall_id")
         walk_sec = hall_walk_times.get(hall_id)
-        walk_min = round(walk_sec / 60) if walk_sec else None
+        walk_min = round(walk_sec / 60) if walk_sec is not None else None
 
         items_for_prompt.append({
             "name": item["name"],
@@ -333,7 +346,7 @@ def rank_with_openai(items: list[dict], profile: dict, hall_walk_times: dict[int
     craving_priority = ""
     if craving:
         craving_priority = f"\n2. Craving match — the student wants \"{craving}\", so strongly prefer items matching this cuisine or food type"
-        priority_nums = """
+        priority_nums = f"""
 3. Nutritional fit for their goal ({goal}): cutting = low calorie + high protein, bulking = high calorie + high protein, maintain = balanced macros
 4. Proximity (shorter walk is better)
 5. Value (reasonable price)"""
@@ -367,7 +380,7 @@ No markdown, no extra text. Just the JSON array."""
         max_tokens=1000,
     )
 
-    raw = response.choices[0].message.content.strip()
+    raw = (response.choices[0].message.content or "").strip()
     if raw.startswith("```"):
         raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
 
@@ -376,6 +389,8 @@ No markdown, no extra text. Just the JSON array."""
     except json.JSONDecodeError:
         return items_for_prompt[:5]
 
+    if not isinstance(picks, list):
+        return items_for_prompt[:5]
     return picks
 
 
@@ -426,8 +441,8 @@ async def recommend(req: RecommendRequest):
         item_data = item_lookup.get(name, {})
 
         walk_sec = hall_walk_times.get(hall_id)
-        walk_min = round(walk_sec / 60) if walk_sec else None
-        scooter_min = max(1, round(walk_min / 3)) if walk_min else None
+        walk_min = round(walk_sec / 60) if walk_sec is not None else None
+        scooter_min = max(1, round(walk_min / 3)) if walk_min is not None else None
 
         coords = hall_coords.get(hall_id, (None, None))
 

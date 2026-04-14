@@ -14,7 +14,7 @@ This repo contains the **TritonEats** mobile app and its **Python API**.
 | API | [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/), [Pydantic](https://docs.pydantic.dev/) v2 |
 | Integrations | OpenAI (menu ranking / reasons), Google Routes API (walking times), Supabase Python client |
 
-Environment variables are loaded from a root `.env` (API) and `triton-eats/.env` (Expo public keys). See `triton-eats/.env.example`.
+Environment variables are loaded from a root `.env` (API) and `triton-eats/.env` (Expo). Supabase URL and anon key use the same **`EXPO_PUBLIC_`** names in both places; see repo `.env.example` and `triton-eats/.env.example`.
 
 ## Prerequisites
 
@@ -25,47 +25,57 @@ Environment variables are loaded from a root `.env` (API) and `triton-eats/.env`
 
 ## How to run TritonEats
 
-Run the **API** and **Expo app** in two terminals from the repo root.
+Do this **in order**: the app calls the API, so bring the API up first, then start Expo.
 
-### 1. API (FastAPI)
+### Step 1 — API (do this first)
+
+From the **repo root**, create `.env` next to the `api/` folder (not inside `api/`) with at least:
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY` (same value as in the Expo app; and optionally `SUPABASE_SERVICE_ROLE_KEY` for server-side profile access)
+- `OPENAI_API_KEY`
+- `GOOGLE_ROUTES_API_KEY`
+
+Use the **same** `EXPO_PUBLIC_SUPABASE_*` values in `triton-eats/.env`, or from `triton-eats` run `ln -sf ../.env .env` so one file serves both. (The API still accepts legacy `NEXT_PUBLIC_SUPABASE_*` names if the new ones are unset.)
+
+Then in a terminal:
 
 ```bash
 cd api
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-Create `../.env` at the **repo root** (next to `api/`) with at least:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (and optionally `SUPABASE_SERVICE_ROLE_KEY` for server-side profile access)
-- `OPENAI_API_KEY`
-- `GOOGLE_ROUTES_API_KEY`
-
-Start the server (use `0.0.0.0` so a **physical phone** on the same Wi‑Fi can reach your Mac):
-
-```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Health check: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
+Use `--host 0.0.0.0` so a **physical phone** on the same Wi‑Fi can reach your Mac. Leave this terminal running.
 
-### 2. TritonEats app (Expo)
+Confirm the API is up: open [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health) in a browser (should return `{"status":"ok"}`).
+
+### Step 2 — TritonEats app (after the API is running)
+
+In a **second** terminal:
 
 ```bash
 cd triton-eats
 cp .env.example .env
 ```
 
-Edit `.env`: set `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, and `EXPO_PUBLIC_API_URL` (e.g. `http://localhost:8000` for iOS Simulator, or `http://<your-mac-LAN-ip>:8000` for a real device if needed).
+Edit `triton-eats/.env`:
+
+- `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` — from your Supabase project  
+- `EXPO_PUBLIC_API_URL` — where the phone/simulator will reach the API, e.g. `http://localhost:8000` for **iOS Simulator** on the same Mac, or `http://<your-mac-LAN-ip>:8000` for **Expo Go on a real device**
+
+Then:
 
 ```bash
 npm install
 npx expo start
 ```
 
-Open in **Expo Go** (scan QR) or press `i` / `a` for simulator / emulator. After changing `.env`, restart Metro (`npx expo start --clear`).
+Open **Expo Go** and scan the QR code, or press `i` / `a` for simulator / emulator.
+
+**Why we mentioned restarting Expo before:** variables that start with `EXPO_PUBLIC_` are read when **Metro starts**. If you already have Expo running and you **change** `triton-eats/.env`, stop Metro (Ctrl+C) and run `npx expo start` again so the new values load. If you finish editing `.env` **before** the first `npx expo start`, you do not need a separate “restart” step.
 
 ---
 

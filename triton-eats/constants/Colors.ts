@@ -17,4 +17,17 @@ export default {
     tabIconSelected: gold,
     shadow: "#182B49",
   },
+  dark: {
+    text: "#F9FAFB",
+    textSecondary: "#9CA3AF",
+    textTertiary: "#6B7280",
+    background: "#111827",
+    card: "#1F2937",
+    input: "#374151",
+    border: "#4B5563",
+    divider: "#374151",
+    tabIconDefault: "#6B7280",
+    tabIconSelected: gold,
+    shadow: "#000000",
+  },
 };
