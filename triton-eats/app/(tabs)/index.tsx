@@ -19,7 +19,7 @@ import * as Location from "expo-location";
 import MapView, { Marker, Region } from "react-native-maps";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useAuth } from "@/context/AuthContext";
-import { getDiningHours, getRecommendations } from "@/lib/api";
+import { getDiningHours, getRecommendations, type DiningHallStatus } from "@/lib/api";
 import Colors from "@/constants/Colors";
 
 const UCSD_CENTER: Region = {
@@ -42,6 +42,44 @@ const DINING_HALLS = [
 
 type LocationMode = "gps" | "pin";
 
+/** Loosen names so map titles match Supabase dining_halls.name rows. */
+function softHallName(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\b(the|dining|hall|market|café|cafe|at)\b/gi, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Find the /dining-hours row for a fixed map marker label. */
+function statusForMapMarker(
+  markerTitle: string,
+  loaded: boolean,
+  rows: DiningHallStatus[]
+): { isOpen: boolean; description: string } {
+  if (!loaded) {
+    return { isOpen: true, description: "Loading hours…" };
+  }
+  if (rows.length === 0) {
+    return { isOpen: true, description: "Hours unavailable" };
+  }
+  const m = markerTitle.toLowerCase().trim();
+  const ms = softHallName(markerTitle);
+  const row = rows.find((h) => {
+    const n = h.name.toLowerCase().trim();
+    const ns = softHallName(h.name);
+    return n.includes(m) || m.includes(n) || ns.includes(ms) || ms.includes(ns);
+  });
+  if (!row) {
+    return { isOpen: true, description: "Hours unavailable" };
+  }
+  return {
+    isOpen: row.is_open,
+    description: row.is_open ? "Open now" : "Closed",
+  };
+}
+
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
@@ -50,7 +88,10 @@ export default function HomeScreen() {
   const [mode, setMode] = useState<LocationMode>("gps");
   const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [openHalls, setOpenHalls] = useState<Set<string>>(new Set());
+  const [diningHours, setDiningHours] = useState<{
+    loaded: boolean;
+    rows: DiningHallStatus[];
+  }>({ loaded: false, rows: [] });
   const [craving, setCraving] = useState("");
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -79,11 +120,7 @@ export default function HomeScreen() {
     })();
 
     getDiningHours().then((hours) => {
-      const open = new Set<string>();
-      for (const h of hours) {
-        if (h.is_open) open.add(h.name);
-      }
-      setOpenHalls(open);
+      setDiningHours({ loaded: true, rows: hours });
     });
   }, []);
 
@@ -170,15 +207,17 @@ export default function HomeScreen() {
           onPress={handleMapPress}
         >
           {DINING_HALLS.map((hall) => {
-            const isOpen = openHalls.size === 0 || Array.from(openHalls).some(
-              (n) => n.toLowerCase().includes(hall.name.toLowerCase()) || hall.name.toLowerCase().includes(n.toLowerCase())
+            const { isOpen, description } = statusForMapMarker(
+              hall.name,
+              diningHours.loaded,
+              diningHours.rows
             );
             return (
               <Marker
                 key={hall.name}
                 coordinate={{ latitude: hall.latitude, longitude: hall.longitude }}
                 title={hall.name}
-                description={isOpen ? "Open now" : "Closed"}
+                description={description}
                 pinColor={isOpen ? Colors.gold : "#9CA3AF"}
                 opacity={isOpen ? 1 : 0.5}
               />
