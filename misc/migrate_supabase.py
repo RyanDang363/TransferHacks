@@ -1,6 +1,6 @@
 """
 Apply dining hall coordinates after running migrate_supabase.sql in the Supabase dashboard.
-Also verifies the user_profiles table exists.
+Verifies user_profiles and favorites tables exist.
 """
 
 import os
@@ -50,11 +50,12 @@ def verify():
     for h in halls.data:
         print(f"  {h['name']}: ({h['latitude']}, {h['longitude']})")
 
-    try:
-        supabase.table("user_profiles").select("id", count="exact").limit(0).execute()
-        print("\nuser_profiles table: EXISTS")
-    except Exception as e:
-        print(f"\nuser_profiles table: NOT FOUND - run migrate_supabase.sql first!\n  {e}")
+    for table in ["user_profiles", "favorites"]:
+        try:
+            supabase.table(table).select("*", count="exact").limit(0).execute()
+            print(f"\n{table} table: EXISTS")
+        except Exception as e:
+            print(f"\n{table} table: NOT FOUND - run migrate_supabase.sql first!\n  {e}")
 
 
 if __name__ == "__main__":

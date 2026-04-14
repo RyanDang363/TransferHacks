@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Image,
   Pressable,
   StyleSheet,
@@ -13,7 +15,7 @@ import * as Location from "expo-location";
 import MapView, { Marker, Region } from "react-native-maps";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useAuth } from "@/context/AuthContext";
-import { getRecommendations } from "@/lib/api";
+import { getDiningHours, getRecommendations } from "@/lib/api";
 import Colors from "@/constants/Colors";
 
 const UCSD_CENTER: Region = {
@@ -44,6 +46,21 @@ export default function HomeScreen() {
   const [mode, setMode] = useState<LocationMode>("gps");
   const [pinCoord, setPinCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [openHalls, setOpenHalls] = useState<Set<string>>(new Set());
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (loading) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [loading]);
 
   useEffect(() => {
     (async () => {
@@ -55,6 +72,14 @@ export default function HomeScreen() {
         setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
       }
     })();
+
+    getDiningHours().then((hours) => {
+      const open = new Set<string>();
+      for (const h of hours) {
+        if (h.is_open) open.add(h.name);
+      }
+      setOpenHalls(open);
+    });
   }, []);
 
   const handleMapPress = (e: any) => {
@@ -129,14 +154,21 @@ export default function HomeScreen() {
           showsMyLocationButton={false}
           onPress={handleMapPress}
         >
-          {DINING_HALLS.map((hall) => (
-            <Marker
-              key={hall.name}
-              coordinate={{ latitude: hall.latitude, longitude: hall.longitude }}
-              title={hall.name}
-              pinColor={Colors.gold}
-            />
-          ))}
+          {DINING_HALLS.map((hall) => {
+            const isOpen = openHalls.size === 0 || Array.from(openHalls).some(
+              (n) => n.toLowerCase().includes(hall.name.toLowerCase()) || hall.name.toLowerCase().includes(n.toLowerCase())
+            );
+            return (
+              <Marker
+                key={hall.name}
+                coordinate={{ latitude: hall.latitude, longitude: hall.longitude }}
+                title={hall.name}
+                description={isOpen ? "Open now" : "Closed"}
+                pinColor={isOpen ? Colors.gold : "#9CA3AF"}
+                opacity={isOpen ? 1 : 0.5}
+              />
+            );
+          })}
 
           {mode === "pin" && pinCoord && (
             <Marker
@@ -215,6 +247,17 @@ export default function HomeScreen() {
         </Pressable>
 
       </View>
+
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <Animated.Image
+            source={require("../../assets/images/logo.png")}
+            style={[styles.loadingLogo, { transform: [{ scale: pulseAnim }] }]}
+          />
+          <Text style={styles.loadingLabel}>Finding your picks...</Text>
+          <ActivityIndicator color={Colors.gold} size="small" style={{ marginTop: 12 }} />
+        </View>
+      )}
     </View>
   );
 }
@@ -352,5 +395,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(24,43,73,0.88)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+  },
+  loadingLogo: {
+    width: 120,
+    height: 120,
+    resizeMode: "contain",
+  },
+  loadingLabel: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: 16,
   },
 });

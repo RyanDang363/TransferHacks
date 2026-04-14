@@ -6,7 +6,9 @@ TritonEats FastAPI Backend
 import json
 import os
 import time
+from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 from dotenv import load_dotenv
@@ -43,6 +45,74 @@ app.add_middleware(
 _walk_cache: dict[tuple, tuple[int, float]] = {}
 WALK_CACHE_TTL = 300  # 5 minutes
 
+PACIFIC = ZoneInfo("America/Los_Angeles")
+
+# Hours per dining hall: day index 0=Mon..6=Sun -> (open_hour, open_min, close_hour, close_min) or None if closed
+DINING_HALL_HOURS: dict[str, list[tuple[int, int, int, int] | None]] = {
+    "64 degrees": [
+        (7, 0, 23, 0), (7, 0, 23, 0), (7, 0, 23, 0), (7, 0, 23, 0),  # Mon-Thu
+        (7, 0, 20, 0),   # Fri
+        (10, 0, 20, 0),  # Sat
+        (10, 0, 23, 0),  # Sun
+    ],
+    "bistro": [
+        (11, 0, 21, 0), (11, 0, 21, 0), (11, 0, 21, 0), (11, 0, 21, 0),
+        (11, 0, 20, 0),
+        None, None,
+    ],
+    "canyon vista": [
+        (7, 0, 21, 0), (7, 0, 21, 0), (7, 0, 21, 0), (7, 0, 21, 0),
+        (7, 0, 20, 0),
+        (10, 0, 20, 0),
+        (10, 0, 20, 0),
+    ],
+    "club med": [
+        (7, 0, 14, 0), (7, 0, 14, 0), (7, 0, 14, 0), (7, 0, 14, 0),
+        (7, 0, 14, 0),
+        None, None,
+    ],
+    "foodworx": [
+        (9, 0, 20, 0), (9, 0, 20, 0), (9, 0, 20, 0), (9, 0, 20, 0),
+        (9, 0, 20, 0),
+        None, None,
+    ],
+    "oceanview": [
+        (8, 0, 21, 0), (8, 0, 21, 0), (8, 0, 21, 0), (8, 0, 21, 0),
+        (8, 0, 16, 0),
+        None, None,
+    ],
+    "sixth": [
+        (8, 0, 23, 0), (8, 0, 23, 0), (8, 0, 23, 0), (8, 0, 23, 0),
+        (8, 0, 20, 0),
+        (10, 0, 20, 0),
+        (10, 0, 23, 0),
+    ],
+    "ventanas": [
+        (7, 0, 23, 0), (7, 0, 23, 0), (7, 0, 23, 0), (7, 0, 23, 0),
+        (7, 0, 20, 0),
+        (10, 0, 20, 0),
+        (10, 0, 23, 0),
+    ],
+}
+
+
+def is_hall_open(hall_name: str) -> bool:
+    now = datetime.now(PACIFIC)
+    day = now.weekday()  # 0=Mon
+    name_lower = hall_name.lower()
+
+    for pattern, schedule in DINING_HALL_HOURS.items():
+        if pattern in name_lower:
+            hours = schedule[day]
+            if hours is None:
+                return False
+            open_h, open_m, close_h, close_m = hours
+            current_minutes = now.hour * 60 + now.minute
+            open_minutes = open_h * 60 + open_m
+            close_minutes = close_h * 60 + close_m
+            return open_minutes <= current_minutes < close_minutes
+    return True  # default to open if not found
+
 
 # ---------------------------------------------------------------------------
 # Request / Response models
@@ -65,6 +135,7 @@ class FoodRecommendation(BaseModel):
     price: Optional[str] = None
     walking_minutes: Optional[int] = None
     scooter_minutes: Optional[int] = None
+    is_open: bool = True
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     reason: str = ""
@@ -306,17 +377,21 @@ async def recommend(req: RecommendRequest):
     if not halls:
         raise HTTPException(status_code=500, detail="No dining halls with coordinates found.")
 
+    open_halls = [h for h in halls if is_hall_open(h["name"])]
+    if not open_halls:
+        return RecommendResponse(recommendations=[])
+
     global _hall_name_cache
-    _hall_name_cache = {h["id"]: h["name"] for h in halls}
+    _hall_name_cache = {h["id"]: h["name"] for h in open_halls}
 
     hall_walk_times: dict[int, int] = {}
-    for hall in halls:
+    for hall in open_halls:
         seconds = await get_walking_time(req.latitude, req.longitude,
                                          hall["latitude"], hall["longitude"])
         if seconds is not None:
             hall_walk_times[hall["id"]] = seconds
 
-    hall_ids = [h["id"] for h in halls]
+    hall_ids = [h["id"] for h in open_halls]
     all_items = get_menu_items_for_halls(hall_ids)
 
     filtered = filter_items(all_items, profile)
@@ -328,8 +403,8 @@ async def recommend(req: RecommendRequest):
     picks = rank_with_openai(filtered, profile, hall_walk_times)
 
     item_lookup = {item["name"]: item for item in filtered}
-    hall_lookup = {h["id"]: h["name"] for h in halls}
-    hall_coords = {h["id"]: (h["latitude"], h["longitude"]) for h in halls}
+    hall_lookup = {h["id"]: h["name"] for h in open_halls}
+    hall_coords = {h["id"]: (h["latitude"], h["longitude"]) for h in open_halls}
 
     recommendations = []
     for pick in picks[:5]:
@@ -361,6 +436,16 @@ async def recommend(req: RecommendRequest):
         ))
 
     return RecommendResponse(recommendations=recommendations)
+
+
+@app.get("/dining-hours")
+async def dining_hours():
+    """Returns open/closed status for all dining halls."""
+    halls = get_dining_halls_with_coords()
+    return [
+        {"name": h["name"], "is_open": is_hall_open(h["name"])}
+        for h in halls
+    ]
 
 
 @app.get("/health")

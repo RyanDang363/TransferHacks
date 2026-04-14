@@ -13,7 +13,9 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           const label = options.title ?? route.name;
           const focused = state.index === index;
 
-          const iconName = route.name === "index" ? "home" : "user";
+          const iconName =
+            route.name === "index" ? "home" :
+            route.name === "favorites" ? "heart" : "user";
 
           return (
             <Pressable
@@ -63,6 +65,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{ title: "Home" }}
+      />
+      <Tabs.Screen
+        name="favorites"
+        options={{ title: "Saved" }}
       />
       <Tabs.Screen
         name="profile"

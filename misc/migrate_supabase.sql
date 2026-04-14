@@ -95,6 +95,42 @@ CREATE POLICY "Public read menu_items"
     USING (true);
 
 -- -----------------------------------------------------------------------------
--- 6. Optional: verify all halls got coordinates (should return 8 rows)
+-- 6. Favorites table
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS favorites (
+    id SERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    food_name TEXT NOT NULL,
+    dining_hall TEXT NOT NULL,
+    station TEXT NOT NULL DEFAULT '',
+    calories INTEGER,
+    protein_g DOUBLE PRECISION,
+    total_carbs_g DOUBLE PRECISION,
+    total_fat_g DOUBLE PRECISION,
+    price TEXT,
+    reason TEXT DEFAULT '',
+    saved_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own favorites" ON favorites;
+DROP POLICY IF EXISTS "Users can insert own favorites" ON favorites;
+DROP POLICY IF EXISTS "Users can delete own favorites" ON favorites;
+
+CREATE POLICY "Users can view own favorites"
+    ON favorites FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own favorites"
+    ON favorites FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own favorites"
+    ON favorites FOR DELETE
+    USING (auth.uid() = user_id);
+
+-- -----------------------------------------------------------------------------
+-- 7. Optional: verify all halls got coordinates (should return 8 rows)
 -- -----------------------------------------------------------------------------
 -- SELECT id, name, latitude, longitude FROM dining_halls ORDER BY id;

@@ -1,7 +1,10 @@
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { useAuth } from "@/context/AuthContext";
 import { FoodRecommendation } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import Colors from "@/constants/Colors";
 
 function formatPrice(price: string | null): string | null {
@@ -18,7 +21,34 @@ export default function RecommendScreen() {
     userLng: string;
   }>();
   const router = useRouter();
+  const { user } = useAuth();
   const recommendations: FoodRecommendation[] = data ? JSON.parse(data) : [];
+  const [savedSet, setSavedSet] = useState<Set<string>>(new Set());
+
+  const handleSave = async (rec: FoodRecommendation) => {
+    if (!user) return;
+    const key = `${rec.name}-${rec.dining_hall}`;
+    if (savedSet.has(key)) return;
+
+    const { error } = await supabase.from("favorites").insert({
+      user_id: user.id,
+      food_name: rec.name,
+      dining_hall: rec.dining_hall,
+      station: rec.station,
+      calories: rec.calories,
+      protein_g: rec.protein_g,
+      total_carbs_g: rec.total_carbs_g,
+      total_fat_g: rec.total_fat_g,
+      price: rec.price,
+      reason: rec.reason,
+    });
+
+    if (error) {
+      Alert.alert("Error", "Couldn't save this pick. Try again.");
+      return;
+    }
+    setSavedSet((prev) => new Set(prev).add(key));
+  };
 
   const handleGoNow = (destLat: number, destLng: number, hallName: string) => {
     const origin = userLat && userLng ? `${userLat},${userLng}` : "";
@@ -79,6 +109,16 @@ export default function RecommendScreen() {
                     </Text>
                   </View>
                 </View>
+                <Pressable
+                  style={({ pressed }) => [styles.heartButton, pressed && { opacity: 0.6 }]}
+                  onPress={() => handleSave(rec)}
+                >
+                  <FontAwesome
+                    name={savedSet.has(`${rec.name}-${rec.dining_hall}`) ? "heart" : "heart-o"}
+                    size={18}
+                    color={savedSet.has(`${rec.name}-${rec.dining_hall}`) ? "#EF4444" : Colors.light.textTertiary}
+                  />
+                </Pressable>
               </View>
 
               <View style={styles.metaRow}>
@@ -218,6 +258,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rankText: { color: Colors.gold, fontWeight: "800", fontSize: 15 },
+  heartButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.light.input,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   titleBlock: { flex: 1 },
   foodName: {
     fontSize: 17,

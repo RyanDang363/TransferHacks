@@ -12,6 +12,7 @@ export interface FoodRecommendation {
   price: string | null;
   walking_minutes: number | null;
   scooter_minutes: number | null;
+  is_open: boolean;
   latitude: number | null;
   longitude: number | null;
   reason: string;
@@ -35,4 +36,15 @@ export async function getRecommendations(
 
   const data = await resp.json();
   return data.recommendations;
+}
+
+export interface DiningHallStatus {
+  name: string;
+  is_open: boolean;
+}
+
+export async function getDiningHours(): Promise<DiningHallStatus[]> {
+  const resp = await fetch(`${API_URL}/dining-hours`);
+  if (!resp.ok) return [];
+  return resp.json();
 }
