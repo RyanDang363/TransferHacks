@@ -73,9 +73,7 @@ npm install
 npx expo start
 ```
 
-Open **Expo Go** and scan the QR code, or press `i` / `a` for simulator / emulator.
-
-**Why we mentioned restarting Expo before:** variables that start with `EXPO_PUBLIC_` are read when **Metro starts**. If you already have Expo running and you **change** `triton-eats/.env`, stop Metro (Ctrl+C) and run `npx expo start` again so the new values load. If you finish editing `.env` **before** the first `npx expo start`, you do not need a separate “restart” step.
+Open **Expo Go** and scan the QR code
 
 ---
 
